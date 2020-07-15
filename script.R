@@ -1,14 +1,17 @@
 #file:///C:/Users/Matthias/AppData/Local/Temp/Rar$EXa1.895/SupplementaryMaterial_P5_Random_Forests_V3.html
+require(tidyverse)
 require(ranger)
-require(party)
 require(caret)
 require(lattice)
 require(glmnet)
 require(missRanger)
+
+#read data
 rootsdata<-read.csv(file.choose(), header=T, row.names=1)
+
+#code variables according to their respective scales
 rootsdata[,"Roots"]=as.numeric(gsub(',','.',rootsdata[,"Roots"]))
 rootsdata[,"Analyzability"]=as.numeric(gsub(',','.',rootsdata[,"Analyzability"]))
-rootsdata["arb", "Roots"]=3.125
 rootsdata[,"Consonants"]=as.numeric(rootsdata[,"Consonants"])
 rootsdata[,"Vowels"]=as.numeric(rootsdata[,"Vowels"])
 rootsdata[,"Ratio"]=as.numeric(rootsdata[,"Ratio"])
@@ -37,12 +40,15 @@ rootsdata[,"Case"]=as.factor(rootsdata[,"Case"])
 #create a kind of consensus interpretation)
 rootsdatatest<-select(rootsdata, c(1:20))
 rootsdatatestimputed<-missRanger(rootsdatatest, pmm.k=3, num.trees=100)
+
 #Estimation of the mtry parameter
 #not 1000% clear yet what the tuneLength parameter is doing, check
 mtry_est<-train(Roots~ ., data=rootsdatatestimputed, method = 'rf', tuneLength=14)
 print(mtry_est)
+#The final value used for the model was mtry = 8.
 
-##the below code is from the suppl mats of Tomaschek et al. (2018)
+##the below code is from the supplementary materials of Tomaschek et al. (2018) adapted for use to the present data set
+##To be checked!!!
 # Get the existing method for the ranger() function
 ranger_type = getModelInfo(model = "ranger")
 
@@ -79,56 +85,82 @@ num_trees
 # [13]  1097  1808  2981  4915  8103 13360 22026 36316 59874 98716
 
 # Define the search grid
-tuneGrid = expand.grid(mtry = 8, num.trees = num_trees)
+tuneGrid = expand.grid(mtry = 10, num.trees = num_trees)
 
 # Define the cross-validation parameters
 control = trainControl(method = "cv", number = 10)
 
+
 # Run the grid search using the train() function of the caret package
-#mod = train(sDur ~ ., data = rf_data, method = ranger_type$ranger, 
-#            trControl = control, tuneGrid = tuneGrid, verbose = TRUE)
-# Load the results of the coarse grid search
-#this is where it stops working, can't find the .rda in the supp mats
-load("data/caret_ranger_coarse.rda")
-
-# Retrieve the optimal parameter settings
-
-
 mod<-train(Roots~ ., data=rootsdatatestimputed, method = ranger_type$ranger, trControl = control, tuneGrid = tuneGrid, verbose = TRUE)
 mod$bestTune
 
-#In this case, optimal num trees = 55, so instead of setting the search space as in the script, I'm setting it to 30:80
-num_trees = c(10:80)
+#with mtry = 8
+#mtry num.trees
+#6    8        33
+
+#with mtry = 10
+#mtry num.trees
+#4   10        12
+
+#rerun with mtry = 10
+#mtry num.trees
+#8    10        42
+
+#rerun with mtry = 10 once more
+#mtry num.trees
+#12   10        51
+
+#In this case, optimal num trees = 51, so instead of setting the search space as in the script, I'm setting it to 30:80
+num_trees = c(40:140)
 tuneGrid <-  expand.grid(mtry = 8, num.trees = num_trees)
 mod2<-train(Roots~ ., data=rootsdatatestimputed, method = ranger_type$ranger, trControl = control, tuneGrid = tuneGrid, verbose = TRUE)
 mod2$bestTune
 
-#The output is that the optimal tree size is 1. This is getting weirder and weirder. You have to check this thoroughly.
+#mod2$bestTune
+#mtry num.trees
+#21    8        60
 
-#forest=ranger(Root.structure ~ ., data=rootsdatatestimputed, num.trees=1, mtry=10, importance="permutation")
-#Error: mtry can not be larger than number of variables in data. Ranger will EXIT now.
-#Fehler in ranger(Root.structure ~ ., data = rootsdatatestimputed, num.trees = 1,  : 
-#                   User interrupt or internal error.
-forest=ranger(Roots ~ ., data=rootsdatatestimputed, num.trees=66, mtry=8, importance="permutation")
+##omit visualization of RMSE 
+
+# Run a random forest with the ranger function
+forest60=ranger(Roots ~ ., data=rootsdatatestimputed, num.trees=60, mtry=8, importance="permutation")
+forest1500=ranger(Roots ~ ., data=rootsdatatestimputed, num.trees=1500, importance="permutation")
 
 
 # Evaluate OOB prediction accuracy
-rmse = sqrt(forest$prediction.error)
+rmse = sqrt(forest60$prediction.error)
 rmse
+#[1]  0.5307185
 
 rmse_cv = min(mod2$results$RMSE)
 rmse_cv
+#[1] 0.4822825
 
-#What I get here is quite different. Suggests a problem.
-#rmse
-#[1] 590.1706
-#rmse_cv = min(mod2$results$RMSE)
-# rmse_cv
-#[1] 118.5394
-rev(sort(varimps))
-varimps = round(importance(forest), 3)
+##Is this difference acceptable?
 
 
+varimps60 = round(importance(forest60), 3)
+rev(sort(varimps60))
+
+#Consonants      Adpositions   Word.order..SO        Syllables             Tone             Case    Stress.system 
+#0.059            0.022            0.011            0.011            0.010            0.006            0.004 
+#Ratio           Fusion           Vowels        Synthesis        Exponence   Word.order..SV  Word.order..SVO 
+#0.003            0.001            0.000           -0.001           -0.002           -0.004           -0.004 
+#Rhythm Stress.alignment        Flexivity          Marking    Analyzability 
+#-0.006           -0.007           -0.011           -0.013           -0.013 
+
+varimps1500 = round(importance(forest1500), 3)
+rev(sort(varimps1500))
+
+#Consonants             Tone      Adpositions        Syllables  Word.order..SVO             Case    Stress.system 
+#0.044            0.014            0.013            0.009            0.006            0.005            0.005 
+#Ratio   Word.order..SO    Analyzability   Word.order..SV        Synthesis           Vowels          Marking 
+#0.005            0.004            0.004            0.003            0.001            0.001            0.000 
+#Fusion        Exponence           Rhythm Stress.alignment        Flexivity 
+#-0.001           -0.002           -0.003           -0.003           -0.004
+
+# Define plot function
 # Define plot function
 plotCoefficientsRF.fnc = function(importances, color = "#CD5555",title="") {
   
@@ -145,8 +177,8 @@ plotCoefficientsRF.fnc = function(importances, color = "#CD5555",title="") {
   dotplot(importances, labels = predictors,
           xlab = "variable importances", ylab = "predictors",
           col = colors[as.numeric(importances==0)+1], pch = 19,
-          scales = list(x = list(at = seq(-1, 1, by = 0.1),
-                                 labels = round(seq(-1, 1, by = 0.1),1))),
+          scales = list(x = list(at = seq(-0.1, 0.1, by = 0.01),
+                                 labels = seq(-0.1, 0.1, by = 0.01))),
           panel = function(...) {
             panel.abline(v = 0, lty = "dotted", col = "black")
             panel.dotplot(...)
@@ -160,5 +192,7 @@ plotCoefficientsRF.fnc = function(importances, color = "#CD5555",title="") {
 par(mfrow = c(1, 1))
 
 # Plot
-plotCoefficientsRF.fnc(importances = varimps, color = "#CD5555", 
+plotCoefficientsRF.fnc(importances = varimps60, color = "#CD5555", 
+                       title = "segment duration")
+plotCoefficientsRF.fnc(importances = varimps1500, color = "#CD5555", 
                        title = "segment duration")
