@@ -1,4 +1,3 @@
-#file:///C:/Users/Matthias/AppData/Local/Temp/Rar$EXa1.895/SupplementaryMaterial_P5_Random_Forests_V3.html
 require(tidyverse)
 require(ranger)
 require(caret)
@@ -31,13 +30,7 @@ rootsdata[,"Word.order..SO"]=as.factor(rootsdata[,"Word.order..SO"])
 rootsdata[,"Adpositions"]=as.factor(rootsdata[,"Adpositions"])
 rootsdata[,"Case"]=as.factor(rootsdata[,"Case"])
 
-#The below is a test to learn RandomForests and make sure you can apply it. When trying to impute all
-#NAs using missRanger there's an error message that I think is due to just too many NAs. So until I fill
-#these, the below is to make sure I can run the randomforests analysis to not do everything in vain. This
-#is meant to just take the first five columns and run the analysis, to be used as a model for the full dataset-
-
-#Impute NA's (play around with parameters a bit, check package documentation. There's also the possibility to 
-#create a kind of consensus interpretation)
+#Impute NA's 
 rootsdatatest<-select(rootsdata, c(1:20))
 rootsdatatestimputed<-missRanger(rootsdatatest, pmm.k=3, num.trees=100)
 
@@ -95,6 +88,7 @@ control = trainControl(method = "cv", number = 10)
 mod<-train(Roots~ ., data=rootsdatatestimputed, method = ranger_type$ranger, trControl = control, tuneGrid = tuneGrid, verbose = TRUE)
 mod$bestTune
 
+#Yields different results even when holding mtry constant. Why?
 #with mtry = 8
 #mtry num.trees
 #6    8        33
@@ -111,44 +105,45 @@ mod$bestTune
 #mtry num.trees
 #12   10        51
 
-#In this case, optimal num trees = 51, so instead of setting the search space as in the script, I'm setting it to 30:80
-num_trees = c(40:140)
-tuneGrid <-  expand.grid(mtry = 8, num.trees = num_trees)
+#In this case, I work with optimal num trees = 51, so instead of setting the search space as in the script, I'm setting it to 30:80
+num_trees = c(20:80)
+tuneGrid <-  expand.grid(mtry = 10, num.trees = num_trees)
 mod2<-train(Roots~ ., data=rootsdatatestimputed, method = ranger_type$ranger, trControl = control, tuneGrid = tuneGrid, verbose = TRUE)
 mod2$bestTune
 
 #mod2$bestTune
 #mtry num.trees
-#21    8        60
+#17    10       36
+
+#so we continue with 36 trees...
 
 ##omit visualization of RMSE 
 
 # Run a random forest with the ranger function
-forest60=ranger(Roots ~ ., data=rootsdatatestimputed, num.trees=60, mtry=8, importance="permutation")
+forest36=ranger(Roots ~ ., data=rootsdatatestimputed, num.trees=36, mtry=10, importance="permutation")
 forest1500=ranger(Roots ~ ., data=rootsdatatestimputed, num.trees=1500, importance="permutation")
 
 
 # Evaluate OOB prediction accuracy
-rmse = sqrt(forest60$prediction.error)
+rmse = sqrt(forest36$prediction.error)
 rmse
-#[1]  0.5307185
+#[1] 0.5314021
 
 rmse_cv = min(mod2$results$RMSE)
 rmse_cv
-#[1] 0.4822825
+#[1] 0.4810242
 
 ##Is this difference acceptable?
 
 
-varimps60 = round(importance(forest60), 3)
-rev(sort(varimps60))
+varimps36 = round(importance(forest36), 3)
+rev(sort(varimps36))
 
-#Consonants      Adpositions   Word.order..SO        Syllables             Tone             Case    Stress.system 
-#0.059            0.022            0.011            0.011            0.010            0.006            0.004 
-#Ratio           Fusion           Vowels        Synthesis        Exponence   Word.order..SV  Word.order..SVO 
-#0.003            0.001            0.000           -0.001           -0.002           -0.004           -0.004 
-#Rhythm Stress.alignment        Flexivity          Marking    Analyzability 
-#-0.006           -0.007           -0.011           -0.013           -0.013 
+#0.086            0.024            0.013            0.013            0.012            0.008            0.006 
+#Word.order..SO   Word.order..SV          Marking        Synthesis Stress.alignment           Fusion           Rhythm 
+#0.003           -0.001           -0.004           -0.004           -0.004           -0.005           -0.005 
+#Ratio        Exponence  Word.order..SVO        Flexivity    Stress.system 
+#-0.005           -0.006           -0.007           -0.010           -0.012 
 
 varimps1500 = round(importance(forest1500), 3)
 rev(sort(varimps1500))
